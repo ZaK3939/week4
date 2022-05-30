@@ -1,13 +1,43 @@
 import detectEthereumProvider from "@metamask/detect-provider"
 import { Strategy, ZkIdentity } from "@zk-kit/identity"
 import { generateMerkleProof, Semaphore } from "@zk-kit/protocols"
-import { providers } from "ethers"
+import { providers,Contract,utils } from "ethers"
 import Head from "next/head"
-import React from "react"
+import React ,{ useEffect, useState } from "react"
 import styles from "../styles/Home.module.css"
+import Greeter from "artifacts/contracts/Greeters.sol/Greeters.json"
+import * as yup from 'yup';
+import { yupResolver } from "@hookform/resolvers/yup";
+import { SubmitHandler, useForm } from 'react-hook-form';
+import Button from "@material-ui/core/Button"
+import { TextField } from "@material-ui/core"
+
+const schema = yup.object().shape({
+    name: yup.string().required(),
+    age: yup.number().max(100, 'Younger than age 100').min(0, 'age 0 is incorrect').required('Input your age!'),
+    address: yup.string().optional(),
+    });
+type Inputs = yup.InferType<typeof schema>;
+
 
 export default function Home() {
-    const [logs, setLogs] = React.useState("Connect your wallet and greet!")
+    const [logs, setLogs] = useState("Connect your wallet and greet!")
+    const [greeting, setGreeting] = useState("No greet")
+    const { register, handleSubmit, formState: { errors },reset } = useForm<Inputs>(
+    { resolver: yupResolver(schema) }
+    );
+const onSubmit: SubmitHandler<Inputs> = data => { console.log(data); reset(); };
+    async function onEvent() {
+        const contract = new Contract("0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512", Greeter.abi)
+        const provider = new providers.JsonRpcProvider("http://localhost:8545")
+        const contractOwner = contract.connect(provider.getSigner())
+        contractOwner.on("NewGreeting", (greeting) => {
+          setGreeting(utils.parseBytes32String(greeting));
+        });
+    }
+    useEffect(() => {
+    onEvent();
+    }, [])
 
     async function greet() {
         setLogs("Creating your Semaphore identity...")
@@ -52,13 +82,13 @@ export default function Home() {
 
         if (response.status === 500) {
             const errorMessage = await response.text()
-
             setLogs(errorMessage)
         } else {
             setLogs("Your anonymous greeting is onchain :)")
         }
     }
 
+    
     return (
         <div className={styles.container}>
             <Head>
@@ -77,7 +107,39 @@ export default function Home() {
                 <div onClick={() => greet()} className={styles.button}>
                     Greet
                 </div>
+               
+                <div className={styles.description}>Greeting: {greeting} ...</div>
+
+                <TextField
+                required
+                label="name"
+                error={'name' in errors}
+                helperText={errors.name?.message}
+                {...register("name") }
+                />
+                <TextField label="address"
+                error={'address' in errors}
+                helperText={errors.address?.message}
+                {...register('address')}  />
+                <TextField
+                required
+                label="age"
+                type="number"
+                error={'age' in errors}
+                helperText={errors.age?.message}
+                {...register('age')}
+                />
+                <Button
+                color="primary"
+                variant="contained"
+                size="large"
+                onClick={handleSubmit(onSubmit)}
+                >
+                save
+                </Button>
             </main>
         </div>
     )
 }
+
+
